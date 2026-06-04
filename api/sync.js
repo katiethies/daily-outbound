@@ -177,17 +177,9 @@ function stripNulls(obj) {
 
 const CHUNK = 200
 
-async function chunkUpsert(db, table, rows) {
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await db.from(table).upsert(rows.slice(i, i + CHUNK), { onConflict: 'id' })
-    if (error) return error
-  }
-  return null
-}
-
-// Upsert without requiring a UNIQUE constraint on attio_record_id:
-// fetch existing {id, attio_record_id} pairs, inject the PK for known records,
-// then upsert on the primary key (which always has a unique constraint).
+// Upsert without requiring a UNIQUE constraint on attio_record_id.
+// Splits records into INSERT (new) and upsert-by-PK (existing) to avoid
+// null-id constraint violations on the insert path.
 async function upsertByAttioId(db, table, rows) {
   if (!rows.length) return { count: 0, error: null }
 
@@ -195,13 +187,25 @@ async function upsertByAttioId(db, table, rows) {
   const idMap = {}
   ;(existing ?? []).forEach(r => { idMap[r.attio_record_id] = r.id })
 
-  const merged = rows.map(row => {
+  const toInsert = []
+  const toUpdate = []
+  for (const row of rows) {
     const sbId = idMap[row.attio_record_id]
-    return sbId ? { ...row, id: sbId } : row
-  })
+    sbId ? toUpdate.push({ ...row, id: sbId }) : toInsert.push(row)
+  }
 
-  const error = await chunkUpsert(db, table, merged)
-  return { count: error ? 0 : merged.length, error }
+  let total = 0
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const { error } = await db.from(table).insert(toInsert.slice(i, i + CHUNK))
+    if (error) return { count: 0, error }
+    total += Math.min(CHUNK, toInsert.length - i)
+  }
+  for (let i = 0; i < toUpdate.length; i += CHUNK) {
+    const { error } = await db.from(table).upsert(toUpdate.slice(i, i + CHUNK), { onConflict: 'id' })
+    if (error) return { count: 0, error }
+    total += Math.min(CHUNK, toUpdate.length - i)
+  }
+  return { count: total, error: null }
 }
 
 async function syncAttioToSupabase(db, sinceISO) {
