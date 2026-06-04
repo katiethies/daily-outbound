@@ -149,6 +149,25 @@ function stripNulls(obj) {
 
 // ── Attio → Supabase ───────────────────────────────────────────────────────────
 
+// Upsert without requiring a UNIQUE constraint on attio_record_id:
+// fetch existing {id, attio_record_id} pairs, inject the PK for known records,
+// then upsert on the primary key (which always has a unique constraint).
+async function upsertByAttioId(db, table, rows) {
+  if (!rows.length) return { count: 0, error: null }
+
+  const { data: existing } = await db.from(table).select('id, attio_record_id').not('attio_record_id', 'is', null)
+  const idMap = {}
+  ;(existing ?? []).forEach(r => { idMap[r.attio_record_id] = r.id })
+
+  const merged = rows.map(row => {
+    const sbId = idMap[row.attio_record_id]
+    return sbId ? { ...row, id: sbId } : row
+  })
+
+  const { error } = await db.from(table).upsert(merged, { onConflict: 'id' })
+  return { count: error ? 0 : merged.length, error }
+}
+
 async function syncAttioToSupabase(db) {
   const log = { companies: 0, deals: 0, people: 0, errors: [] }
 
@@ -156,11 +175,9 @@ async function syncAttioToSupabase(db) {
   try {
     const records = await attioAll('companies')
     const rows = records.map(r => stripNulls(mapCompany(r))).filter(r => r.attio_record_id)
-    if (rows.length) {
-      const { error } = await db.from('companies').upsert(rows, { onConflict: 'attio_record_id' })
-      if (error) log.errors.push(`companies: ${error.message}`)
-      else log.companies = rows.length
-    }
+    const { count, error } = await upsertByAttioId(db, 'companies', rows)
+    if (error) log.errors.push(`companies: ${error.message}`)
+    else log.companies = count
   } catch (e) { log.errors.push(`companies fetch: ${e.message}`) }
 
   // Build Attio→Supabase ID maps
@@ -172,11 +189,9 @@ async function syncAttioToSupabase(db) {
   try {
     const records = await attioAll('deals')
     const rows = records.map(r => stripNulls(mapDeal(r, companyMap))).filter(r => r.attio_record_id)
-    if (rows.length) {
-      const { error } = await db.from('deals').upsert(rows, { onConflict: 'attio_record_id' })
-      if (error) log.errors.push(`deals: ${error.message}`)
-      else log.deals = rows.length
-    }
+    const { count, error } = await upsertByAttioId(db, 'deals', rows)
+    if (error) log.errors.push(`deals: ${error.message}`)
+    else log.deals = count
   } catch (e) { log.errors.push(`deals fetch: ${e.message}`) }
 
   const dealMap = {}
@@ -189,11 +204,9 @@ async function syncAttioToSupabase(db) {
     const rows = records
       .map(r => stripNulls(mapPerson(r, companyMap, dealMap)))
       .filter(r => r.attio_record_id)
-    if (rows.length) {
-      const { error } = await db.from('people').upsert(rows, { onConflict: 'attio_record_id' })
-      if (error) log.errors.push(`people: ${error.message}`)
-      else log.people = rows.length
-    }
+    const { count, error } = await upsertByAttioId(db, 'people', rows)
+    if (error) log.errors.push(`people: ${error.message}`)
+    else log.people = count
   } catch (e) { log.errors.push(`people fetch: ${e.message}`) }
 
   return log
