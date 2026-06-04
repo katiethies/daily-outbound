@@ -160,6 +160,16 @@ function stripNulls(obj) {
 
 // ── Attio → Supabase ───────────────────────────────────────────────────────────
 
+const CHUNK = 200
+
+async function chunkUpsert(db, table, rows) {
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await db.from(table).upsert(rows.slice(i, i + CHUNK), { onConflict: 'id' })
+    if (error) return error
+  }
+  return null
+}
+
 // Upsert without requiring a UNIQUE constraint on attio_record_id:
 // fetch existing {id, attio_record_id} pairs, inject the PK for known records,
 // then upsert on the primary key (which always has a unique constraint).
@@ -175,7 +185,7 @@ async function upsertByAttioId(db, table, rows) {
     return sbId ? { ...row, id: sbId } : row
   })
 
-  const { error } = await db.from(table).upsert(merged, { onConflict: 'id' })
+  const error = await chunkUpsert(db, table, merged)
   return { count: error ? 0 : merged.length, error }
 }
 
@@ -262,10 +272,12 @@ function toAttioValues(person) {
 async function syncSupabaseToAttio(db) {
   const log = { pushed: 0, skipped: 0, errors: [] }
 
+  // Only push people who have been actively worked — skip untouched records
   const { data: people, error } = await db
     .from('people')
     .select('*')
     .not('attio_record_id', 'is', null)
+    .or('connection_status.neq.Not sent,outreach_status.neq.Not started,first_dm_date.not.is.null,first_email_date.not.is.null,reply_status.not.is.null')
 
   if (error) { log.errors.push(error.message); return log }
 
