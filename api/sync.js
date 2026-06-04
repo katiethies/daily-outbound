@@ -86,7 +86,7 @@ function mapCompany(r) {
     kind_of_business: val(values, 'kind_of_business', 'business_type', 'type'),
     saas_or_agency:   val(values, 'saas_or_agency', 'company_type', 'category'),
     tier:             val(values, 'tier'),
-    outbound:         val(values, 'outbound') ?? false,
+    outbound:         toBool(val(values, 'outbound')) ?? false,
   }
 }
 
@@ -136,10 +136,21 @@ function mapPerson(r, companyMap, dealMap) {
     ongoing_emails_tally:      val(values, 'ongoing_emails_tally'),
     reply_status:              val(values, 'reply_status'),
     next_due_task:             val(values, 'next_due_task'),
-    dnc:                       val(values, 'dnc'),
+    dnc:                       toBool(val(values, 'dnc')),
     ai_draft_message:          val(values, 'ai_draft_message'),
     edited_message:            val(values, 'edited_message'),
   }
+}
+
+// Coerce Attio boolean-ish values (selects like "DNC", "Yes", "true") to real booleans
+function toBool(v) {
+  if (v == null) return null
+  if (typeof v === 'boolean') return v
+  const s = String(v).toLowerCase().trim()
+  if (s === 'true' || s === 'yes' || s === '1') return true
+  if (s === 'false' || s === 'no'  || s === '0' || s === '') return false
+  // Non-empty option string means the flag is set (e.g. "DNC" option selected)
+  return true
 }
 
 // Strip null values so we don't clobber existing data unnecessarily
