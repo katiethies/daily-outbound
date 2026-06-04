@@ -29,15 +29,30 @@ async function attio(method, path, body) {
   return text ? JSON.parse(text) : null
 }
 
-// Fetch every page from an Attio object
-async function attioAll(objectSlug) {
+// Fetch every page from an Attio object, optionally filtered to records
+// modified after `sinceISO` (ISO-8601 string). Falls back to all records
+// if Attio rejects the filter.
+async function attioAll(objectSlug, sinceISO) {
   const records = []
   let offset = 0
   while (true) {
-    const { data } = await attio('POST', `/objects/${objectSlug}/records/query`, {
-      limit: 500,
-      offset,
-    })
+    const body = { limit: 500, offset }
+    if (sinceISO) {
+      body.filter = {
+        attribute: { slug: 'updated_at' },
+        condition: 'after',
+        value: sinceISO,
+      }
+    }
+    let data
+    try {
+      ;({ data } = await attio('POST', `/objects/${objectSlug}/records/query`, body))
+    } catch (e) {
+      if (sinceISO && e.message.includes('400')) {
+        // Filter not supported for this object — fall back to all
+        ;({ data } = await attio('POST', `/objects/${objectSlug}/records/query`, { limit: 500, offset }))
+      } else throw e
+    }
     records.push(...(data ?? []))
     if (!data || data.length < 500) break
     offset += data.length
@@ -189,26 +204,26 @@ async function upsertByAttioId(db, table, rows) {
   return { count: error ? 0 : merged.length, error }
 }
 
-async function syncAttioToSupabase(db) {
-  const log = { companies: 0, deals: 0, people: 0, errors: [] }
+async function syncAttioToSupabase(db, sinceISO) {
+  const log = { companies: 0, deals: 0, people: 0, errors: [], mode: sinceISO ? 'incremental' : 'full' }
 
   // 1. Companies
   try {
-    const records = await attioAll('companies')
+    const records = await attioAll('companies', sinceISO)
     const rows = records.map(r => stripNulls(mapCompany(r))).filter(r => r.attio_record_id)
     const { count, error } = await upsertByAttioId(db, 'companies', rows)
     if (error) log.errors.push(`companies: ${error.message}`)
     else log.companies = count
   } catch (e) { log.errors.push(`companies fetch: ${e.message}`) }
 
-  // Build Attio→Supabase ID maps
+  // Build Attio→Supabase ID maps (only need IDs touched in this run + existing)
   const companyMap = {}
   const { data: coRows } = await db.from('companies').select('id, attio_record_id')
   ;(coRows ?? []).forEach(r => { companyMap[r.attio_record_id] = r.id })
 
   // 2. Deals
   try {
-    const records = await attioAll('deals')
+    const records = await attioAll('deals', sinceISO)
     const rows = records.map(r => stripNulls(mapDeal(r, companyMap))).filter(r => r.attio_record_id)
     const { count, error } = await upsertByAttioId(db, 'deals', rows)
     if (error) log.errors.push(`deals: ${error.message}`)
@@ -221,7 +236,7 @@ async function syncAttioToSupabase(db) {
 
   // 3. People (last — depends on companies + deals)
   try {
-    const records = await attioAll('people')
+    const records = await attioAll('people', sinceISO)
     const rows = records
       .map(r => stripNulls(mapPerson(r, companyMap, dealMap)))
       .filter(r => r.attio_record_id)
@@ -325,7 +340,12 @@ export default async function handler(req, res) {
   const db = supabaseClient()
   const results = {}
 
-  results.attioToSupabase = await syncAttioToSupabase(db)
+  // ?full=1 → sync everything; default (cron) → only last 20 minutes
+  const full = req.query?.full === '1' || req.query?.full === 'true'
+  const sinceISO = full ? null : new Date(Date.now() - 20 * 60 * 1000).toISOString()
+  console.log(`[sync] mode=${full ? 'full' : 'incremental'} since=${sinceISO ?? 'all'}`)
+
+  results.attioToSupabase = await syncAttioToSupabase(db, sinceISO)
   console.log('[sync] Attio→Supabase', results.attioToSupabase)
 
   results.supabaseToAttio = await syncSupabaseToAttio(db)
