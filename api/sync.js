@@ -178,14 +178,20 @@ function stripNulls(obj) {
 const CHUNK = 200
 
 // Upsert without requiring a UNIQUE constraint on attio_record_id.
-// Splits records into INSERT (new) and upsert-by-PK (existing) to avoid
-// null-id constraint violations on the insert path.
+// Only looks up the specific attio_record_ids being synced (not the full table),
+// then splits into INSERT (new) and upsert-by-PK (existing) batches.
 async function upsertByAttioId(db, table, rows) {
   if (!rows.length) return { count: 0, error: null }
 
-  const { data: existing } = await db.from(table).select('id, attio_record_id').not('attio_record_id', 'is', null)
+  // Look up only the IDs we actually need — avoids full table scans
+  const attioIds = rows.map(r => r.attio_record_id)
   const idMap = {}
-  ;(existing ?? []).forEach(r => { idMap[r.attio_record_id] = r.id })
+  for (let i = 0; i < attioIds.length; i += CHUNK) {
+    const { data } = await db.from(table)
+      .select('id, attio_record_id')
+      .in('attio_record_id', attioIds.slice(i, i + CHUNK))
+    ;(data ?? []).forEach(r => { idMap[r.attio_record_id] = r.id })
+  }
 
   const toInsert = []
   const toUpdate = []
