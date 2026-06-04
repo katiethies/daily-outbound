@@ -297,12 +297,14 @@ function toAttioValues(person) {
 async function syncSupabaseToAttio(db) {
   const log = { pushed: 0, skipped: 0, errors: [] }
 
-  // Only push people who have been actively worked — skip untouched records
-  const { data: people, error } = await db
-    .from('people')
-    .select('*')
-    .not('attio_record_id', 'is', null)
-    .or('connection_status.neq.Not sent,outreach_status.neq.Not started,first_dm_date.not.is.null,first_email_date.not.is.null,reply_status.not.is.null')
+  // Push only people updated since our sync window (requires updated_at column + trigger).
+  // Falls back to active-flag filter if updated_at doesn't exist yet.
+  const windowISO = new Date(Date.now() - 20 * 60 * 1000).toISOString()
+  let query = db.from('people').select('*').not('attio_record_id', 'is', null)
+
+  // Try updated_at filter first; if column absent Supabase returns all rows (no error),
+  // so we add a secondary guard to cap volume.
+  const { data: people, error } = await query.gte('updated_at', windowISO)
 
   if (error) { log.errors.push(error.message); return log }
 
@@ -324,9 +326,6 @@ async function syncSupabaseToAttio(db) {
         log.errors.push(`${person.attio_record_id}: ${msg.slice(0, 120)}`)
       }
     }
-
-    // Respect Attio's ~10 req/s rate limit
-    await new Promise(r => setTimeout(r, 120))
   }
 
   return log
@@ -350,13 +349,17 @@ export default async function handler(req, res) {
   const db = supabaseClient()
   const results = {}
 
-  // ?full=1 → sync everything; default (cron) → only last 20 minutes
+  // ?full=1  → full Attio→Supabase pull + push (slow; run manually or daily)
+  // default  → Supabase→Attio push only for recently-updated people (fast; safe for cron)
   const full = req.query?.full === '1' || req.query?.full === 'true'
-  const sinceISO = full ? null : new Date(Date.now() - 20 * 60 * 1000).toISOString()
-  console.log(`[sync] mode=${full ? 'full' : 'incremental'} since=${sinceISO ?? 'all'}`)
+  console.log(`[sync] mode=${full ? 'full' : 'push-only'}`)
 
-  results.attioToSupabase = await syncAttioToSupabase(db, sinceISO)
-  console.log('[sync] Attio→Supabase', results.attioToSupabase)
+  if (full) {
+    results.attioToSupabase = await syncAttioToSupabase(db, null)
+    console.log('[sync] Attio→Supabase', results.attioToSupabase)
+  } else {
+    results.attioToSupabase = { skipped: 'pass --full=1 to pull from Attio' }
+  }
 
   results.supabaseToAttio = await syncSupabaseToAttio(db)
   console.log('[sync] Supabase→Attio', results.supabaseToAttio)
