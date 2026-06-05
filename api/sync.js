@@ -134,7 +134,7 @@ function mapPerson(r, companyMap, dealMap) {
     score:              val(values, 'score'),
     prospect_source:    val(values, 'prospect_source', 'source', 'lead_source'),
     channel:            val(values, 'channel', 'outreach_channel'),
-    personalization_type: val(values, 'status', 'pitch_type', 'personalization_type'),
+    pitch_type:           val(values, 'status', 'pitch_type', 'personalization_type'),
     connection_status:         val(values, 'connection_status'),
     connection_requested_date: val(values, 'connection_request_sent', 'connection_requested_date'),
     connected_on:              val(values, 'connected_on'),

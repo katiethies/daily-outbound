@@ -45,7 +45,7 @@ Deepline/Clay → Supabase (hub, we own) → Attio (CRM sync)
 - Manual sync button: built into app header, calls /api/sync?full=1
 
 ## Attio Field Slug Fixes (already applied)
-- personalization_type → pitch_type / status
+- personalization_type → pitch_type / status (Supabase column renamed to pitch_type 2026-06-05)
 - connection_requested_date → connection_request_sent
 - deal_id lookup → associated_deals
 - ai_draft_message → sales_approach_summary

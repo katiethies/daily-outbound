@@ -65,7 +65,7 @@ create table if not exists people (
   deal_id                   uuid references deals(id),
   attio_record_id           text,
   channel                   text,
-  personalization_type      text,
+  pitch_type                text,
   created_at                timestamptz default now()
 );
 
@@ -97,7 +97,7 @@ insert into deals (id, deal_name, deal_stage, deal_value, company_id, next_due_t
   ('22222222-2222-2222-2222-222222222209', 'TechVault — Upsell',       'Scheduling',       9000,  '11111111-1111-1111-1111-111111111109', current_date + 2,   'Upsell conversation'),
   ('22222222-2222-2222-2222-222222222210', 'DataOps Pro — Enterprise', 'Booked call',      15000, '11111111-1111-1111-1111-111111111103', current_date,       'Enterprise tier discussion');
 
-insert into people (id, name, email, linkedin_url, job_title, company_id, connection_status, connection_requested_date, connected_on, outreach_status, last_outreach_date, first_dm_date, first_email_date, ongoing_dms_tally, ongoing_emails_tally, reply_status, next_due_task, prospect_source, dnc, tier, score, ai_draft_message, deal_id, channel, personalization_type) values
+insert into people (id, name, email, linkedin_url, job_title, company_id, connection_status, connection_requested_date, connected_on, outreach_status, last_outreach_date, first_dm_date, first_email_date, ongoing_dms_tally, ongoing_emails_tally, reply_status, next_due_task, prospect_source, dnc, tier, score, ai_draft_message, deal_id, channel, pitch_type) values
   ('33333333-3333-3333-3333-333333333301', 'Sarah Chen',     'sarah@cloudscale.io',    'https://linkedin.com/in/sarahchen',    'Head of Growth',     '11111111-1111-1111-1111-111111111101', 'Connected',   '2026-05-01', '2026-05-05', 'In progress', current_date - 1, current_date - 5, null,               1, 0, 'Replied positive', current_date,     'LinkedIn', false, 'A', 92, 'Hi Sarah, loved your post on PLG at CloudScale — your take on activation loops was spot on. Would love to share how we helped a similar company cut time-to-value by 40%.', '22222222-2222-2222-2222-222222222201', 'LinkedIn DM',   'Manual'),
   ('33333333-3333-3333-3333-333333333302', 'James Okafor',   'james@dataopspro.com',   'https://linkedin.com/in/jamesokafor',  'VP of Engineering',  '11111111-1111-1111-1111-111111111103', 'Connected',   '2026-05-10', '2026-05-14', 'In progress', current_date - 3, null,             null,               0, 0, null,             current_date - 1, 'LinkedIn', false, 'A', 88, 'Hey James, impressive scale at DataOps Pro — noticed you''re handling petabyte-level pipelines. We help eng teams like yours reduce infrastructure costs by 30% without sacrificing reliability.', '22222222-2222-2222-2222-222222222202', 'LinkedIn DM',   'AI review'),
   ('33333333-3333-3333-3333-333333333303', 'Priya Nair',     'priya@synapse.ai',       'https://linkedin.com/in/priyanair',    'CEO',                '11111111-1111-1111-1111-111111111107', 'Connected',   '2026-04-15', '2026-04-20', 'Replied',     current_date - 7, current_date - 10, current_date - 8, 2, 1, 'Replied positive', current_date + 3, 'LinkedIn', false, 'A', 95, 'Priya, your AI-native GTM approach at Synapse is genuinely different from what I see in the market. Would love 20 mins to share how we''re helping AI-first companies scale outbound.', '22222222-2222-2222-2222-222222222203', 'Multichannel', 'Manual'),

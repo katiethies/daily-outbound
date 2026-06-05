@@ -81,8 +81,8 @@ export default function EmailSection() {
       // Group B: follow-up emails (5+ days since last contact)
       supabase.from('people').select('*, companies(name, tier)')
         .or('dnc.is.null,dnc.eq.false')
-        .not('personalization_type', 'is', null)
-        .not('personalization_type', 'in', `(${EXCLUDED_PITCH_TYPES_EMAIL.map(s => `"${s}"`).join(',')})`)
+        .not('pitch_type', 'is', null)
+        .not('pitch_type', 'in', `(${EXCLUDED_PITCH_TYPES_EMAIL.map(s => `"${s}"`).join(',')})`)
         .in('outreach_status', ['First email', 'Second Email', 'Ongoing Emails', 'Third Email'])
         .or(`last_outreach_date.is.null,last_outreach_date.lt.${c5},first_email_date.lt.${c5},second_email_date.lt.${c5},third_email_date.lt.${c5}`)
         .order('last_outreach_date', { ascending: true, nullsFirst: true }),
