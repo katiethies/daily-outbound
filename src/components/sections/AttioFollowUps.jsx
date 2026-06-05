@@ -22,19 +22,45 @@ export default function AttioFollowUps() {
 
   async function load() {
     setLoading(true)
-    const { data, error } = await supabase
+
+    // Fetch active deals (no embeds — PostgREST FK cache unreliable)
+    const { data: dealsRaw } = await supabase
       .from('deals')
-      .select('*, companies(name), people(name, job_title)')
+      .select('*')
       .not('deal_stage', 'in', '("Won","Lost","Dormant")')
-    if (!error) {
-      const all = data || []
-      setNeedsTask(all.filter(d => !d.next_due_task))
-      setHasTask(
-        all
-          .filter(d => d.next_due_task)
-          .sort((a, b) => a.next_due_task.localeCompare(b.next_due_task))
-      )
+
+    const deals = dealsRaw || []
+    if (!deals.length) { setLoading(false); return }
+
+    // Fetch companies and people in parallel, join client-side
+    const companyIds = [...new Set(deals.map(d => d.company_id).filter(Boolean))]
+    const dealIds    = deals.map(d => d.id)
+
+    const [{ data: compData }, { data: peopleData }] = await Promise.all([
+      companyIds.length
+        ? supabase.from('companies').select('id, name').in('id', companyIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from('people').select('name, job_title, deal_id').in('deal_id', dealIds),
+    ])
+
+    const companyMap = Object.fromEntries((compData || []).map(c => [c.id, c]))
+    const dealPersonMap = {}
+    for (const p of peopleData || []) {
+      if (p.deal_id && !dealPersonMap[p.deal_id]) dealPersonMap[p.deal_id] = p
     }
+
+    const assembled = deals.map(d => ({
+      ...d,
+      companies: d.company_id ? (companyMap[d.company_id] ?? null) : null,
+      people:    dealPersonMap[d.id] ? [dealPersonMap[d.id]] : [],
+    }))
+
+    setNeedsTask(assembled.filter(d => !d.next_due_task))
+    setHasTask(
+      assembled
+        .filter(d => d.next_due_task)
+        .sort((a, b) => a.next_due_task.localeCompare(b.next_due_task))
+    )
     setLoading(false)
   }
 

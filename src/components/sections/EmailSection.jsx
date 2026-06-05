@@ -14,7 +14,6 @@ function fmt(d) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// Sub-group 1 excludes 'Not qualified' in addition to the Tier A variants
 const EXCLUDED_TIERS_SG1 = [
   'Not qualified',
   'Tier A [ghostwriting agency/solo]',
@@ -46,16 +45,22 @@ export default function EmailSection() {
     const today = todayStr()
     const c5    = cutoff5()
 
+    // Pre-fetch all companies into a map so we can join client-side
+    // (avoids PostgREST embedded join which requires FK in schema cache)
+    const { data: compData } = await supabase.from('companies').select('id, name, tier')
+    const companyMap = Object.fromEntries((compData || []).map(c => [c.id, c]))
+    const withCompany = p => ({ ...p, companies: p.company_id ? (companyMap[p.company_id] ?? null) : null })
+
     const [r1, r2, r3, r4, rB] = await Promise.all([
-      // Sub-group 1: cannot send LI connection → go email
-      supabase.from('people').select('*, companies(name, tier)')
+      // Sub-group 1: cannot send LI connection
+      supabase.from('people').select('*')
         .eq('connection_status', 'Cannot send connection request')
         .is('outreach_status', null)
         .not('prospect_source', 'is', null)
         .not('email', 'is', null),
 
       // Sub-group 2: LI request expired (status null, date is set and before today)
-      supabase.from('people').select('*, companies(name, tier)')
+      supabase.from('people').select('*')
         .is('connection_status', null)
         .not('connection_requested_date', 'is', null)
         .lt('connection_requested_date', today)
@@ -65,7 +70,7 @@ export default function EmailSection() {
         .not('email', 'is', null),
 
       // Sub-group 3: connection request sent but no date recorded
-      supabase.from('people').select('*, companies(name, tier)')
+      supabase.from('people').select('*')
         .eq('connection_status', 'Connection request sent')
         .is('connection_requested_date', null)
         .not('prospect_source', 'is', null)
@@ -74,12 +79,12 @@ export default function EmailSection() {
         .not('email', 'is', null),
 
       // Sub-group 4: explicitly flagged ready for email
-      supabase.from('people').select('*, companies(name, tier)')
+      supabase.from('people').select('*')
         .eq('outreach_status', 'Ready for Email')
         .not('email', 'is', null),
 
       // Group B: follow-up emails (5+ days since last contact)
-      supabase.from('people').select('*, companies(name, tier)')
+      supabase.from('people').select('*')
         .or('dnc.is.null,dnc.eq.false')
         .not('pitch_type', 'is', null)
         .not('pitch_type', 'in', `(${EXCLUDED_PITCH_TYPES_EMAIL.map(s => `"${s}"`).join(',')})`)
@@ -91,18 +96,18 @@ export default function EmailSection() {
     // Build Group A — client-side tier filter then dedup
     const seenA = new Set()
     const groupA = []
-    const sg1  = (r1.data || []).filter(p => !EXCLUDED_TIERS_SG1.includes(p.companies?.tier))
+    const sg1  = (r1.data || []).map(withCompany).filter(p => !EXCLUDED_TIERS_SG1.includes(p.companies?.tier))
     const sg23 = [
-      ...(r2.data || []).filter(p => !EXCLUDED_TIERS_SG23.includes(p.companies?.tier)),
-      ...(r3.data || []).filter(p => !EXCLUDED_TIERS_SG23.includes(p.companies?.tier)),
+      ...(r2.data || []).map(withCompany).filter(p => !EXCLUDED_TIERS_SG23.includes(p.companies?.tier)),
+      ...(r3.data || []).map(withCompany).filter(p => !EXCLUDED_TIERS_SG23.includes(p.companies?.tier)),
     ]
-    for (const p of [...sg1, ...sg23, ...(r4.data || [])]) {
+    for (const p of [...sg1, ...sg23, ...(r4.data || []).map(withCompany)]) {
       if (seenA.has(p.id)) continue
       seenA.add(p.id)
       groupA.push({ ...p, _group: 'A' })
     }
 
-    const groupB = (rB.data || []).map(p => ({ ...p, _group: 'B' }))
+    const groupB = (rB.data || []).map(p => ({ ...withCompany(p), _group: 'B' }))
 
     setQueue([...groupA, ...groupB])
     setLoading(false)

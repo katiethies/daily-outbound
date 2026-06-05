@@ -51,10 +51,16 @@ export default function LinkedInDM() {
     setLoading(true)
     const c5 = cutoff5()
 
+    // Pre-fetch all companies into a map so we can join client-side
+    // (avoids PostgREST embedded join which requires FK in schema cache)
+    const { data: compData } = await supabase.from('companies').select('id, name, tier')
+    const companyMap = Object.fromEntries((compData || []).map(c => [c.id, c]))
+    const withCompany = p => ({ ...p, companies: p.company_id ? (companyMap[p.company_id] ?? null) : null })
+
     // Group A part 1: Connected, never contacted, qualified source + tier
     const { data: a1 } = await supabase
       .from('people')
-      .select('*, companies(name, tier)')
+      .select('*')
       .eq('connection_status', 'Connected')
       .is('outreach_status', null)
       .not('prospect_source', 'is', null)
@@ -64,7 +70,7 @@ export default function LinkedInDM() {
     // Group A part 2: Ready for DM override
     const { data: a2 } = await supabase
       .from('people')
-      .select('*, companies(name, tier)')
+      .select('*')
       .eq('outreach_status', 'Ready for DM')
 
     // Combine Group A — tier filter client-side, deduplicate
@@ -72,15 +78,16 @@ export default function LinkedInDM() {
     const groupA = []
     for (const p of [...(a1 || []), ...(a2 || [])]) {
       if (seenA.has(p.id)) continue
-      if (EXCLUDED_TIERS_DM.includes(p.companies?.tier)) continue
+      const enriched = withCompany(p)
+      if (EXCLUDED_TIERS_DM.includes(enriched.companies?.tier)) continue
       seenA.add(p.id)
-      groupA.push({ ...p, _group: 'A' })
+      groupA.push({ ...enriched, _group: 'A' })
     }
 
     // Group B: follow-up DMs (5+ days since last contact)
     const { data: b } = await supabase
       .from('people')
-      .select('*, companies(name, tier)')
+      .select('*')
       .or('dnc.is.null,dnc.eq.false')
       .is('reply_status', null)
       .not('pitch_type', 'is', null)
@@ -89,7 +96,7 @@ export default function LinkedInDM() {
       .or(`last_outreach_date.is.null,last_outreach_date.lt.${c5},first_dm_date.lt.${c5},second_dm_date.lt.${c5},third_dm_date.lt.${c5}`)
       .order('last_outreach_date', { ascending: true, nullsFirst: true })
 
-    const groupB = (b || []).map(p => ({ ...p, _group: 'B' }))
+    const groupB = (b || []).map(p => ({ ...withCompany(p), _group: 'B' }))
 
     setQueue([...groupA, ...groupB])
     setLoading(false)
