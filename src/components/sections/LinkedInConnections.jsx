@@ -28,7 +28,10 @@ export default function LinkedInConnections() {
     const { data } = await supabase
       .from('people')
       .select('*, companies(name)')
-      .or('connection_status.eq.Not connected,connection_status.is.null')
+      .or('dnc.is.null,dnc.eq.false')
+      .not('connection_status', 'in', '("Connection request sent","Cannot send connection request","Connected")')
+      .not('prospect_source', 'is', null)
+      .is('outreach_status', null)
       .order('score', { ascending: false })
     setQueue(data || [])
     setLoading(false)
@@ -38,7 +41,7 @@ export default function LinkedInConnections() {
 
   async function sendRequest() {
     await supabase.from('people').update({
-      connection_status: 'Requested',
+      connection_status: 'Connection request sent',
       connection_requested_date: todayStr(),
     }).eq('id', person.id)
 
