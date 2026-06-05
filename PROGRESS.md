@@ -62,8 +62,8 @@ Deepline/Clay → Supabase (hub, we own) → Attio (CRM sync)
 ## Known Issues / Next Steps
 
 ### Immediate (do next session):
-- [ ] Fix all app filters to match real Attio values (full filter spec documented in conversation)
-- [ ] Deploy filter fixes to Vercel
+- [x] Fix all app filters to match real Attio values — deployed 2026-06-05
+- [x] Deploy filter fixes to Vercel — commit 2fd2cc0
 
 ### After that:
 - [ ] Set up cron-job.org (Katie does manually — hit https://daily-outbound.vercel.app/api/sync every 15 min)
