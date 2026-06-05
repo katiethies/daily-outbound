@@ -29,18 +29,26 @@ export default function LinkedInConnections() {
     const { data: compData } = await supabase.from('companies').select('id, name')
     const companyMap = Object.fromEntries((compData || []).map(c => [c.id, c]))
 
+    // Note: connection_status filter is applied client-side because PostgREST's
+    // NOT IN excludes NULL rows (NULL NOT IN (...) = NULL = false in SQL), which
+    // would wipe out all uncontacted prospects whose connection_status is null.
     const { data } = await supabase
       .from('people')
       .select('*')
       .or('dnc.is.null,dnc.eq.false')
-      .not('connection_status', 'in', '("Connection request sent","Cannot send connection request","Connected")')
       .not('prospect_source', 'is', null)
       .is('outreach_status', null)
       .order('score', { ascending: false })
 
+    const EXCLUDED_STATUSES = ['Connection request sent', 'Cannot send connection request', 'Connected']
+
     setQueue(
       (data || [])
-        .filter(p => p.prospect_source != null && p.prospect_source !== '')
+        .filter(p =>
+          p.prospect_source != null &&
+          p.prospect_source !== '' &&
+          !EXCLUDED_STATUSES.includes(p.connection_status)
+        )
         .map(p => ({ ...p, companies: p.company_id ? (companyMap[p.company_id] ?? null) : null }))
     )
     setLoading(false)
