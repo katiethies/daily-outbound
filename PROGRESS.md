@@ -66,7 +66,7 @@ Deepline/Clay → Supabase (hub, we own) → Attio (CRM sync)
 - [x] Deploy filter fixes to Vercel — commit 2fd2cc0
 
 ### After that:
-- [ ] Set up cron-job.org (Katie does manually — hit https://daily-outbound.vercel.app/api/sync every 15 min)
+- [x] Set up cron-job.org — two jobs running as of 2026-06-05: push every 15 min (/api/sync), full pull daily at 6am UTC (/api/sync?full=1)
 - [ ] Build connected → re-enrich trigger (when connection_status changes to Connected, trigger Deepline enrichment)
 - [ ] Connect Airtable → Heyreach via API
 - [ ] Connect Airtable → Smartlead/Instantly via API
