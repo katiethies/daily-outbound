@@ -25,15 +25,24 @@ export default function LinkedInConnections() {
 
   async function load() {
     setLoading(true)
+
+    const { data: compData } = await supabase.from('companies').select('id, name')
+    const companyMap = Object.fromEntries((compData || []).map(c => [c.id, c]))
+
     const { data } = await supabase
       .from('people')
-      .select('*, companies(name)')
+      .select('*')
       .or('dnc.is.null,dnc.eq.false')
       .not('connection_status', 'in', '("Connection request sent","Cannot send connection request","Connected")')
       .not('prospect_source', 'is', null)
       .is('outreach_status', null)
       .order('score', { ascending: false })
-    setQueue(data || [])
+
+    setQueue(
+      (data || [])
+        .filter(p => p.prospect_source != null && p.prospect_source !== '')
+        .map(p => ({ ...p, companies: p.company_id ? (companyMap[p.company_id] ?? null) : null }))
+    )
     setLoading(false)
   }
 
