@@ -86,11 +86,11 @@ function mapCompany(r) {
     domain:           val(values, 'domains', 'primary_domain', 'website', 'domain'),
     linkedin_url:     val(values, 'linkedin_url', 'linkedin', 'linkedin_profile_url'),
     employee_range:   val(values, 'employee_range', 'team_size', 'headcount', 'employees'),
-    estimated_arr:    val(values, 'estimated_arr', 'arr', 'annual_revenue'),
+    estimated_arr:    val(values, 'estimated_arr_usd', 'estimated_arr', 'arr', 'annual_revenue'),
     kind_of_business: val(values, 'kind_of_business', 'business_type', 'type'),
-    saas_or_agency:   val(values, 'saas_or_agency', 'company_type', 'category'),
+    saas_or_agency:   val(values, 'saas_agency', 'saas_or_agency', 'company_type', 'category'),
     tier:             val(values, 'tier'),
-    outbound:         toBool(val(values, 'outbound')) ?? false,
+    outbound:         toBool(val(values, 'outbound_y_n', 'outbound')) ?? false,
   })
 }
 
@@ -114,12 +114,12 @@ function mapDeal(r, companyMap) {
 function mapPerson(r, companyMap, dealMap) {
   const { id, values } = r
   const attioCo   = val(values, 'company', 'companies', 'primary_company')
-  const attioDeal = val(values, 'deal', 'deals', 'associated_deal')
+  const attioDeal = val(values, 'associated_deals', 'deal', 'deals', 'associated_deal')
   return stripNulls({
     attio_record_id:    id.record_id,
     name:               val(values, 'name'),
     email:              val(values, 'email_addresses', 'email', 'primary_email_address'),
-    linkedin_url:       val(values, 'linkedin_url', 'linkedin', 'linkedin_profile_url'),
+    linkedin_url:       val(values, 'linkedin', 'linkedin_url', 'linkedin_profile_url'),
     job_title:          val(values, 'job_title', 'title', 'position'),
     company_id:         attioCo   ? (companyMap[attioCo]   ?? null) : null,
     deal_id:            attioDeal ? (dealMap[attioDeal]     ?? null) : null,
@@ -127,9 +127,9 @@ function mapPerson(r, companyMap, dealMap) {
     score:              val(values, 'score'),
     prospect_source:    val(values, 'prospect_source', 'source', 'lead_source'),
     channel:            val(values, 'channel', 'outreach_channel'),
-    personalization_type: val(values, 'pitch_type', 'personalization_type'),
+    personalization_type: val(values, 'status', 'pitch_type', 'personalization_type'),
     connection_status:         val(values, 'connection_status'),
-    connection_requested_date: val(values, 'connection_requested_date'),
+    connection_requested_date: val(values, 'connection_request_sent', 'connection_requested_date'),
     connected_on:              val(values, 'connected_on'),
     outreach_status:           val(values, 'outreach_status'),
     last_outreach_date:        val(values, 'last_outreach_date'),
@@ -144,37 +144,20 @@ function mapPerson(r, companyMap, dealMap) {
     reply_status:              val(values, 'reply_status'),
     next_due_task:             val(values, 'next_due_task'),
     dnc:                       toBool(val(values, 'dnc')),
-    ai_draft_message:          val(values, 'ai_draft_message'),
+    ai_draft_message:          val(values, 'sales_approach_summary', 'ai_draft_message'),
     edited_message:            val(values, 'edited_message'),
   })
 }
 
 async function upsertByAttioId(supabase, table, rows) {
   if (!rows.length) return 0
-  const { data: existing } = await supabase.from(table).select('id, attio_record_id').not('attio_record_id', 'is', null)
-  const idMap = {}
-  ;(existing ?? []).forEach(r => { idMap[r.attio_record_id] = r.id })
-
-  const toInsert = [], toUpdate = []
-  for (const row of rows) {
-    const sbId = idMap[row.attio_record_id]
-    sbId ? toUpdate.push({ ...row, id: sbId }) : toInsert.push(row)
-  }
-
   let total = 0
-  for (let i = 0; i < toInsert.length; i += CHUNK) {
-    const chunk = toInsert.slice(i, i + CHUNK)
-    const { error } = await supabase.from(table).insert(chunk)
-    if (error) { console.error(`\n  ✗ insert error (${table}): ${error.message}`); continue }
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK)
+    const { error } = await supabase.from(table).upsert(chunk, { onConflict: 'attio_record_id' })
+    if (error) { console.error(`\n  ✗ upsert error (${table}): ${error.message}`); continue }
     total += chunk.length
-    process.stdout.write(`\r  ${table}: ${total}/${rows.length} (${toInsert.length} new, ${toUpdate.length} update)...`)
-  }
-  for (let i = 0; i < toUpdate.length; i += CHUNK) {
-    const chunk = toUpdate.slice(i, i + CHUNK)
-    const { error } = await supabase.from(table).upsert(chunk, { onConflict: 'id' })
-    if (error) { console.error(`\n  ✗ update error (${table}): ${error.message}`); continue }
-    total += chunk.length
-    process.stdout.write(`\r  ${table}: ${total}/${rows.length} (${toInsert.length} new, ${toUpdate.length} update)...`)
+    process.stdout.write(`\r  ${table}: ${total}/${rows.length}...`)
   }
   console.log()
   return total
