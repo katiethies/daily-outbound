@@ -134,7 +134,7 @@ function mapPerson(r, companyMap, dealMap) {
     score:              val(values, 'score'),
     prospect_source:    val(values, 'prospect_source', 'source', 'lead_source'),
     channel:            val(values, 'channel', 'outreach_channel'),
-    personalization_type: val(values, 'personalization_type'),
+    personalization_type: val(values, 'pitch_type', 'personalization_type'),
     // Outreach fields (present if user created them in Attio)
     connection_status:         val(values, 'connection_status'),
     connection_requested_date: val(values, 'connection_requested_date'),
@@ -334,15 +334,6 @@ async function syncSupabaseToAttio(db) {
 // ── Vercel handler ─────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  // Protect the endpoint — Vercel injects CRON_SECRET automatically for cron invocations
-  const secret = process.env.CRON_SECRET
-  if (secret) {
-    const auth = req.headers.authorization ?? ''
-    if (auth !== `Bearer ${secret}`) {
-      return res.status(401).json({ error: 'Unauthorized' })
-    }
-  }
-
   const ts = new Date().toISOString()
   console.log(`[sync] start ${ts}`)
 

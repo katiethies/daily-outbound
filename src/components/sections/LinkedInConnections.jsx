@@ -28,8 +28,7 @@ export default function LinkedInConnections() {
     const { data } = await supabase
       .from('people')
       .select('*, companies(name)')
-      .eq('connection_status', 'Not sent')
-      .in('tier', ['A', 'B'])
+      .or('connection_status.eq.Not connected,connection_status.is.null')
       .order('score', { ascending: false })
     setQueue(data || [])
     setLoading(false)

@@ -23,7 +23,7 @@ export default function LinkedInDM() {
     const { data } = await supabase
       .from('people')
       .select('*, companies(name)')
-      .eq('connection_status', 'Connected')
+      .or('connection_status.eq.Connected,connection_status.is.null')
       .is('first_dm_date', null)
       .order('connected_on', { ascending: true })
     setQueue(data || [])

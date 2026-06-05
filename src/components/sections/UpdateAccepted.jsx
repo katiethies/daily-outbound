@@ -26,7 +26,7 @@ export default function UpdateAccepted() {
     const { data } = await supabase
       .from('people')
       .select('*, companies(name)')
-      .eq('connection_status', 'Requested')
+      .eq('connection_status', 'Connection request sent')
       .gte('connection_requested_date', cutoff21())
       .order('connection_requested_date', { ascending: true })
     setPeople(data || [])

@@ -20,9 +20,12 @@ function StatCard({ label, value, color = 'indigo' }) {
 
 function replyBadge(status) {
   const map = {
-    'Replied positive': 'bg-green-100 text-green-700',
-    'Replied negative': 'bg-red-100 text-red-700',
-    'Replied neutral':  'bg-slate-100 text-slate-600',
+    'Interested (Deal)':  'bg-green-100 text-green-700',
+    'Replied':            'bg-blue-100 text-blue-700',
+    'Not Interested':     'bg-red-100 text-red-700',
+    'Not qualified':      'bg-red-100 text-red-700',
+    'Not now':            'bg-amber-100 text-amber-700',
+    'Dormant':            'bg-slate-100 text-slate-500',
   }
   return map[status] || 'bg-slate-100 text-slate-600'
 }
@@ -41,7 +44,7 @@ export default function DailySummary() {
       supabase.from('people').select('id', { count: 'exact', head: true }).eq('connection_requested_date', today),
       supabase.from('people').select('id', { count: 'exact', head: true }).eq('first_dm_date', today),
       supabase.from('people').select('id', { count: 'exact', head: true }).eq('first_email_date', today),
-      supabase.from('people').select('*, companies(name)').not('reply_status', 'is', null).neq('reply_status', 'No reply'),
+      supabase.from('people').select('*, companies(name)').not('reply_status', 'is', null),
     ])
     setStats({
       connections: connR.count || 0,

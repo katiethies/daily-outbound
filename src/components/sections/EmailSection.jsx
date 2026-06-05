@@ -20,7 +20,7 @@ export default function EmailSection() {
       .select('*, companies(name)')
       .not('email', 'is', null)
       .is('first_email_date', null)
-      .neq('outreach_status', 'DNC')
+      .or('outreach_status.is.null,outreach_status.eq.Ready for Email')
       .order('score', { ascending: false })
     setQueue(data || [])
     setLoading(false)
